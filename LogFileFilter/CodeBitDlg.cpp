@@ -24,27 +24,29 @@ CCodeBitDlg::CCodeBitDlg(CWnd* pParent /*=NULL*/)
 	: CDialog(CCodeBitDlg::IDD, pParent)
 {
 	//{{AFX_DATA_INIT(CCodeBitDlg)
-	
+
 	//}}AFX_DATA_INIT
 	AfxInitRichEdit();
 	m_Flag_SelectAllOrDeleteSelected_ExpressCodeBits = -1;
 	m_Flag_SelectAllOrDeleteSelected_ControlCodeBits = -1;
-	pFileIpdbg = new CFile;
-	pFileCadcom = new CStdioFile;
+	//pFileIpdbg = new CFile;
+	//pFileCadcom = new CStdioFile;
 }
 
 CCodeBitDlg::~CCodeBitDlg()
 {
-	if (pFileIpdbg != NULL)
+	/*if (pFileIpdbg != NULL)
 	{
 		pFileIpdbg->Close();
 		delete pFileIpdbg;
+		pFileIpdbg = NULL;
 	}
 	if (pFileCadcom != NULL)
 	{
 		pFileCadcom = NULL;
 		delete pFileCadcom;
-	}
+		pFileCadcom = NULL;
+	}*/
 }
 
 void CCodeBitDlg::DoDataExchange(CDataExchange* pDX)
@@ -85,35 +87,35 @@ END_MESSAGE_MAP()
 // CCodeBitDlg message handlers
 
 
-BOOL CCodeBitDlg::OnInitDialog() 
+BOOL CCodeBitDlg::OnInitDialog()
 {
 	CDialog::OnInitDialog();
 	CMainFrame *pMain = (CMainFrame *)AfxGetApp()->m_pMainWnd;
 	CLogFileFilterView *pMyView = (CLogFileFilterView *)pMain->GetActiveView();
 	if(pMyView->strIpdbgFilePath.IsEmpty())
 	{
-		MessageBox("Please load IPDBG file");
+		//MessageBox("Please load IPDBG file");
 		return FALSE;
 	}
-	pFileIpdbg->Open(pMyView->strIpdbgFilePath, CFile::modeRead | CFile::typeBinary);
-	int resSetTime = CLogFileOperation::SetLogTimeWidthAndDefaultQueryTime(*pFileIpdbg, m_LogTimeWidth, m_StartQueryTime_CDateTimeCtrl, m_EndQueryTime_CDateTimeCtrl);
-	if (!resSetTime)
-	{
-		if (resSetTime == -1)
-		{
-			MessageBox("Open file failed!");
-		}
-		else
-		{
-			MessageBox("Read file error, Please confirm the record!");
-		}
-		return FALSE;
-	}
+	LogFile ipdbgLogFile(pMyView->strIpdbgFilePath);
+	unsigned long ulBeginTime = 0, ulEndTime = 0;
+	std::string strBeginTime = ipdbgLogFile.GetLogBeaginTime(ulBeginTime);
+	std::string strEndTime = ipdbgLogFile.GetLogEndTime(ulEndTime);
+	std::string strTimeWidth;
+	strTimeWidth.append(strBeginTime);	strTimeWidth.append("--");	strTimeWidth.append(strEndTime);
+	m_LogTimeWidth.SetWindowText(strTimeWidth.c_str());
+	m_StartQueryTime_CDateTimeCtrl.SetFormat("yyyy-MM-dd HH:mm:ss");	
+	m_EndQueryTime_CDateTimeCtrl.SetFormat("yyyy-MM-dd HH:mm:ss");
+	CTime t_Start(ulBeginTime), t_Stop(ulEndTime);
+	m_StartQueryTime_CDateTimeCtrl.SetTime(&t_Start);
+	m_EndQueryTime_CDateTimeCtrl.SetTime(&t_Stop);
+
+	int resDisplayBits = 0;
 	if(pMyView->strCadcomFilePath.IsEmpty())
 	{
 		pFileIpdbg->SeekToBegin();
-		int resDisplayBitList = DisplayTheNumOfCodeBitsWithoutCADCOM(*pFileIpdbg);
-		if (resDisplayBitList < 0)
+		int resDisplayBits = DisplayWithoutCADCOM(*pFileIpdbg);
+		if (resDisplayBits < 0)
 		{
 			MessageBox("An error occurred while displaying the code bit!");
 		}
@@ -121,23 +123,31 @@ BOOL CCodeBitDlg::OnInitDialog()
 	}
 	else
 	{
-		pFileCadcom->Open(pMyView->strCadcomFilePath, CFile::modeRead);
-		int resDisplayBitList = DisplayTheNumOfCodeBitsWithCADCOM(*pFileCadcom);
-		if (resDisplayBitList < 0)
+		//pFileCadcom->Open(pMyView->strCadcomFilePath, CFile::modeRead);
+		/*std::string line;
+		ifstream cadFile ();
+		if (myfile.is_open())
 		{
-			MessageBox("An error occurred while displaying the code bit!");
+			while ( getline (myfile,line) )
+			{
+
+			}
+			myfile.close();
+		}*/
+		ifstream cadFile(pMyView->strCadcomFilePath);
+		if (cadFile.is_open())
+		{
+			DisplayWithCADCOM(*pFileCadcom);
 		}
+		myfile.close();
+		//int resDisplayBits = DisplayWithCADCOM(*pFileCadcom);
 		m_Flag_LoadCadcomFile = 1;
 	}
-	pMain = NULL;
-	pMyView = NULL;
-	delete pMyView;
-	delete pMain;
 	return TRUE;  // return TRUE unless you set the focus to a control
 	              // EXCEPTION: OCX Property Pages should return FALSE
 }
 
-void CCodeBitDlg::OnSelectAllExpressCodeBits() 
+void CCodeBitDlg::OnSelectAllExpressCodeBits()
 {
 	// TODO: Add your control notification handler code here
 	m_Flag_SelectAllOrDeleteSelected_ExpressCodeBits = 0;
@@ -150,14 +160,14 @@ void CCodeBitDlg::OnSelectAllExpressCodeBits()
 	}
 }
 
-void CCodeBitDlg::OnDeleteSelectedExpressCodeBits() 
+void CCodeBitDlg::OnDeleteSelectedExpressCodeBits()
 {
 	// TODO: Add your control notification handler code here
 	m_Flag_SelectAllOrDeleteSelected_ExpressCodeBits = 1;
 	m_ExpressCodeBitsSelectedList.ResetContent();
 }
 
-void CCodeBitDlg::OnSelectAllControlCodeBits() 
+void CCodeBitDlg::OnSelectAllControlCodeBits()
 {
 	// TODO: Add your control notification handler code here
 	m_Flag_SelectAllOrDeleteSelected_ControlCodeBits = 0;
@@ -170,70 +180,78 @@ void CCodeBitDlg::OnSelectAllControlCodeBits()
 	}
 }
 
-void CCodeBitDlg::OnDeleteSelectedControlCodeBits() 
+void CCodeBitDlg::OnDeleteSelectedControlCodeBits()
 {
 	// TODO: Add your control notification handler code here
 	m_Flag_SelectAllOrDeleteSelected_ControlCodeBits = 1;
 	m_ControlCodeBitsSelectedList.ResetContent();
 }
 
-int CCodeBitDlg::DisplayTheNumOfCodeBitsWithCADCOM(CStdioFile &rFile)
+int CCodeBitDlg::DisplayWithCADCOM(CStdioFile &rFile)
 {
 	if (rFile == NULL)
 	{
 		return -1;
 	}
-	CString strSearchKeyword;
-	int m_flagMMI = 0;
-	int m_flagSYS = 0;
+	CString strFindKey;
+	bool m_flagMMI = false;
+	bool m_flagSYS = false;
 	CString CodeBitsLength;
 	int numOfCodeBits = 0;
-	while(rFile.ReadString(strSearchKeyword))
+	while(rFile.ReadString(strFindKey))
 	{
-		if(strSearchKeyword.Find("DESTINATION = MMI")>=0)
-		{
-			m_flagMMI = 1;
+		if (!m_flagMMI) {
+			if(strFindKey.Find("DESTINATION = MMI")>=0)
+			{
+				m_flagMMI = true;
+				continue;
+			}
 		}
-		if(strSearchKeyword.Find("SOURCE = MMI")>= 0)
-		{
-			m_flagSYS = 1;
+		if (!m_flagSYS) {
+			if(strFindKey.Find("SOURCE = MMI")>= 0)
+			{
+				m_flagSYS = true;
+				continue;
+			}
 		}
-		if(strSearchKeyword.Find("MESSAGE = LENGTH") >= 0)
+
+		if(strFindKey.Find("MESSAGE = LENGTH") >= 0)
 		{
 			int nFirst = strlen("MESSAGE = LENGTH(");
-			CodeBitsLength = strSearchKeyword.Mid(nFirst, strlen(strSearchKeyword) - nFirst -1);
+			CodeBitsLength = strFindKey.Mid(nFirst, strlen(strFindKey) - nFirst -1);
 			numOfCodeBits = _ttoi(CodeBitsLength);
 		}
-		if(m_flagMMI != 0 && m_flagSYS == 0 && strSearchKeyword.Find(" 1 = ") >= 0)
+		if(m_flagMMI != 0 && m_flagSYS == 0 && strFindKey.Find(" 1 = ") >= 0)
 		{
 			for(int i = 0; i < numOfCodeBits; i++)
 			{
-				m_ExpressCodeBitsList.InsertString(i,strSearchKeyword);
-				rFile.ReadString(strSearchKeyword);
+				m_ExpressCodeBitsList.InsertString(i,strFindKey);
+				rFile.ReadString(strFindKey);
 			}
+			continue;
 		}
-		if(m_flagSYS != 0 && strSearchKeyword.Find(" 1 =") >= 0)
+		if(m_flagSYS != 0 && strFindKey.Find(" 1 =") >= 0)
 		{
 			for(int j = 0; j < numOfCodeBits; j++)
 			{
-				m_ControlCodeBitsList.InsertString(j,strSearchKeyword);
-				rFile.ReadString(strSearchKeyword);
+				m_ControlCodeBitsList.InsertString(j,strFindKey);
+				rFile.ReadString(strFindKey);
 			}
-		} 
+		}
 	}
 	return 0;
 }
 
 void CCodeBitDlg::OnClickedDecreaseControlCodeBits()
 {
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int nSel = m_ControlCodeBitsSelectedList.GetCurSel();
 	m_ControlCodeBitsSelectedList.DeleteString(nSel);
 }
 
 void CCodeBitDlg::OnClickedIncreaseControlCodeBits()
 {
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int nSel = m_ControlCodeBitsList.GetCurSel();
 	CString strIncreaseControlCodeBits;
 	m_ControlCodeBitsList.GetText(nSel,strIncreaseControlCodeBits);
@@ -242,14 +260,14 @@ void CCodeBitDlg::OnClickedIncreaseControlCodeBits()
 
 void CCodeBitDlg::OnClickedDecreaseExpressCodeBits()
 {
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int nSel = m_ExpressCodeBitsSelectedList.GetCurSel();
 	m_ExpressCodeBitsSelectedList.DeleteString(nSel);
 }
 
 void CCodeBitDlg::OnClickedIncreaseExpressCodeBits()
 {
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	int nSel = m_ExpressCodeBitsList.GetCurSel();
 	CString strIncreaseExpressCodeBits;
 	m_ExpressCodeBitsList.GetText(nSel,strIncreaseExpressCodeBits);
@@ -259,45 +277,48 @@ void CCodeBitDlg::OnClickedIncreaseExpressCodeBits()
 void CCodeBitDlg::OnDatetimechangeQuerytimestart(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	LPNMDATETIMECHANGE pDTChange = reinterpret_cast<LPNMDATETIMECHANGE>(pNMHDR);
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	*pResult = 0;
 }
 
 void CCodeBitDlg::OnDatetimechangeQuerytimestop(NMHDR *pNMHDR, LRESULT *pResult)
 {
 	LPNMDATETIMECHANGE pDTChange = reinterpret_cast<LPNMDATETIMECHANGE>(pNMHDR);
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	*pResult = 0;
 }
 
 void CCodeBitDlg::OnClickedCheck()
 {
 	CDialog::OnOK();
-	m_CountOfControlCodeBitsSelectedList = m_ControlCodeBitsSelectedList.GetCount();
-	m_CountOfExpressCodeBitsSelectedList = m_ExpressCodeBitsSelectedList.GetCount();
-	if(m_CountOfControlCodeBitsSelectedList == 0 && m_CountOfExpressCodeBitsSelectedList == 0)
-	{
-		MessageBox("The query content is empty, Please reset the code bits you want to query!");
-	}
-
-	m_StartQueryTime_CDateTimeCtrl.GetTime(m_StartQueryTime_CTime);	// ½«CDatetimeCtrl×ª»»ÎªCTimeÀà£¬±ãÓÚºóÃæÉ¸Ñ¡ÈÕÖ¾¼ÇÂ¼
-	m_EndQueryTime_CDateTimeCtrl.GetTime(m_EndQueryTime_CTime);		// ½«CDatetimeCtrl×ª»»ÎªCTimeÀà£¬±ãÓÚºóÃæÉ¸Ñ¡ÈÕÖ¾¼ÇÂ¼
-	if(m_StartQueryTime_CTime > m_EndQueryTime_CTime)
-	{
-		MessageBox("Start time cannot be greater than end time, Please reset the time you want to query!");
-		return;
-	}
 	CMainFrame *pMain = (CMainFrame *)AfxGetApp()->m_pMainWnd;
 	CLogFileFilterView *pMyView = (CLogFileFilterView *)pMain->GetActiveView();
-	GetQueryCodeBit();
-	pMyView->m_pListBox->AddString("²éÑ¯ÂëÎ»ÐÅÏ¢ÖÐ:");
-	GetCodeBitMsg(*pFileIpdbg);
-	if(pMyView->m_pListBox->GetCount() > 1 && 
+	int numControlSelected = m_ControlCodeBitsSelectedList.GetCount();
+	int numExpressSelected = m_ExpressCodeBitsSelectedList.GetCount();
+	if(numControlSelected == 0 && numExpressSelected == 0)
+	{
+		MessageBox("The query content is empty!");
+	}
+
+	m_StartQueryTime_CDateTimeCtrl.GetTime(m_StartQueryTime_CTime);	// ï¿½ï¿½CDatetimeCtrl×ªï¿½ï¿½ÎªCTimeï¿½à£¬ï¿½ï¿½ï¿½Úºï¿½ï¿½ï¿½É¸Ñ¡ï¿½ï¿½Ö¾ï¿½ï¿½Â¼
+	m_EndQueryTime_CDateTimeCtrl.GetTime(m_EndQueryTime_CTime);		// ï¿½ï¿½CDatetimeCtrl×ªï¿½ï¿½ÎªCTimeï¿½à£¬ï¿½ï¿½ï¿½Úºï¿½ï¿½ï¿½É¸Ñ¡ï¿½ï¿½Ö¾ï¿½ï¿½Â¼
+	if(m_StartQueryTime_CTime > m_EndQueryTime_CTime)
+	{
+		MessageBox("Start time cannot be greater than end time.");
+		return;
+	}
+
+	GetQueryCodeBit(numControlSelected, numExpressSelected);
+	pMyView->m_pListBox->AddString("ï¿½ï¿½Ñ¯ï¿½ï¿½Î»ï¿½ï¿½Ï¢ï¿½ï¿½:");
+	GetCodeBitMsg(*pFileIpdbg, numControlSelected, numExpressSelected);
+
+
+	if(pMyView->m_pListBox->GetCount() > 1 &&
 		pMyView->m_pListBox->SetTopIndex(pMyView->m_pListBox->GetCount() -1))
 	{
 		MessageBox("Set scroll bar error!");
 	}
-	pFileIpdbg->SeekToBegin();	// »¹Ô­ÎÄ¼þÖ¸ÕëÎ»ÖÃ
+	pFileIpdbg->SeekToBegin();	// ï¿½ï¿½Ô­ï¿½Ä¼ï¿½Ö¸ï¿½ï¿½Î»ï¿½ï¿½
 	pMain = NULL;
 	pMyView = NULL;
 	delete pMyView;
@@ -306,62 +327,64 @@ void CCodeBitDlg::OnClickedCheck()
 
 void CCodeBitDlg::OnClickedCancel()
 {
-	// TODO: ÔÚ´ËÌí¼Ó¿Ø¼þÍ¨Öª´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½Í¨Öªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	CDialog::OnCancel();
 }
 
-void CCodeBitDlg::GetQueryCodeBit()
-{	// ½«Òª²éÑ¯µÄÂëÎ»´æ·ÅÔÚmap£¬Çø·ÖÊÇ·ñ¼ÓÔØÁËCADCOMÎÄ¼þ
+void CCodeBitDlg::GetQueryCodeBit(const int numControl, const int numExpress)
+{	// ï¿½ï¿½Òªï¿½ï¿½Ñ¯ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½mapï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½CADCOMï¿½Ä¼ï¿½
 	CString strControlCodeBitsName, strExpressCodeBitsName;
 	int j = 0, k = 0;
 	struct CODEBITINFO CodeBitCtr, CodeBitExp;
+	//memset(&CodeBitCtr, 0, sizeof(CODEBITINFO));
+	//memset(&CodeBitExp, 0, sizeof(CODEBITINFO));
 	if(m_Flag_LoadCadcomFile == 1)
 	{
-		for(j = 0; j < m_CountOfControlCodeBitsSelectedList; j++)
+		for(j = 0; j < numControl; j++)
 		{
 			m_ControlCodeBitsSelectedList.GetText(j, strControlCodeBitsName);
 			strControlCodeBitsName.Replace(" ", "");
 			CodeBitCtr.CodeBitName = strControlCodeBitsName.Mid(strControlCodeBitsName.Find("=")+1);
-			CodeBitCtr.CodeBitStatus = 0;	// ÂëÎ»×´Ì¬³õÊ¼Ä¬ÈÏÎª0
+			CodeBitCtr.CodeBitStatus = 0;	// ï¿½ï¿½Î»×´Ì¬ï¿½ï¿½Ê¼Ä¬ï¿½ï¿½Îª0
 			m_mapRecordControlCodeBitsInfo[_ttoi(strControlCodeBitsName.Left(strControlCodeBitsName.Find("=")+1))] = CodeBitCtr;
 		}
-		for(k = 0; k < m_CountOfExpressCodeBitsSelectedList; k++)
+		for(k = 0; k < numExpress; k++)
 		{
 			m_ExpressCodeBitsSelectedList.GetText(k, strExpressCodeBitsName);
 			strExpressCodeBitsName.Replace(" ", "");
 			CodeBitExp.CodeBitName = strExpressCodeBitsName.Mid(strExpressCodeBitsName.Find("=")+1);
-			CodeBitExp.CodeBitStatus = 0;	// ÂëÎ»×´Ì¬³õÊ¼Ä¬ÈÏÎª0
+			CodeBitExp.CodeBitStatus = 0;	// ï¿½ï¿½Î»×´Ì¬ï¿½ï¿½Ê¼Ä¬ï¿½ï¿½Îª0
 			m_mapRecordExpressCodeBitsInfo[_ttoi(strExpressCodeBitsName.Left(strExpressCodeBitsName.Find("=")+1))] = CodeBitExp;
-		} 
+		}
 	}
 	else
 	{
-		for(j = 0; j < m_CountOfControlCodeBitsSelectedList; j++)
+		for(j = 0; j < numControl; j++)
 		{
 			m_ControlCodeBitsSelectedList.GetText(j, strControlCodeBitsName);
 			CodeBitCtr.CodeBitName = "";
-			CodeBitCtr.CodeBitStatus = 0;	// ÂëÎ»×´Ì¬³õÊ¼Ä¬ÈÏÎª0
+			CodeBitCtr.CodeBitStatus = 0;	// ï¿½ï¿½Î»×´Ì¬ï¿½ï¿½Ê¼Ä¬ï¿½ï¿½Îª0
 			m_mapRecordControlCodeBitsInfo[_ttoi(strControlCodeBitsName)] = CodeBitCtr;
 		}
-		for(k = 0; k < m_CountOfExpressCodeBitsSelectedList; k++)
+		for(k = 0; k < numExpress; k++)
 		{
 			m_ExpressCodeBitsSelectedList.GetText(k, strExpressCodeBitsName);
 			CodeBitExp.CodeBitName = "";
-			CodeBitExp.CodeBitStatus = 0;	// ÂëÎ»×´Ì¬³õÊ¼Ä¬ÈÏÎª0
+			CodeBitExp.CodeBitStatus = 0;	// ï¿½ï¿½Î»×´Ì¬ï¿½ï¿½Ê¼Ä¬ï¿½ï¿½Îª0
 			m_mapRecordExpressCodeBitsInfo[_ttoi(strExpressCodeBitsName)] = CodeBitExp;
 		}
 	}
 }
 
-void CCodeBitDlg::GetCodeBitMsg(CFile& rFile)
+void CCodeBitDlg::GetCodeBitMsg(CFile& rFile, const int numControl, const int numExpress)
 {
 	CMainFrame *pMain = (CMainFrame *)AfxGetApp()->m_pMainWnd;
 	CLogFileFilterView *pMyView = (CLogFileFilterView *)pMain->GetActiveView();
 	REPLAY_DATA dataReplay;
 	map<int,CODEBITINFO> mapExpressCodeBitsTemp, mapControlCodeBitsTemp;
-	map<int,CODEBITINFO>::iterator iterExpressTemp, iterControlTemp;	// ÓÃÓÚÅÐ¶ÏÃ¿ÌõÈÕÖ¾µÄÂëÎ»ÊÇ·ñÓÐ±ä»¯
-	int NumOfReadExpressCodeBits = 0, NumOfReadControlCodeBits = 0;	// ¼ÇÂ¼¶ÁÈ¡¿ØÖÆ±íÊ¾ÂëÎ»µÄ´ÎÊý
-	int NumOfRowsRead = 0;	// ¼ÇÂ¼¶Áµ½ÄÄÒ»ÐÐ
+	map<int,CODEBITINFO>::iterator iterExpressTemp, iterControlTemp;	// ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ç·ï¿½ï¿½Ð±ä»¯
+	int NumOfReadExpressCodeBits = 0, NumOfReadControlCodeBits = 0;	// ï¿½ï¿½Â¼ï¿½ï¿½È¡ï¿½ï¿½ï¿½Æ±ï¿½Ê¾ï¿½ï¿½Î»ï¿½Ä´ï¿½ï¿½ï¿½
+	int NumOfRowsRead = 0;	// ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½
 	int resGetBitValue = 0;
 	int numFixedLine = pMyView->m_pListBox->GetCount();
 	CString strJudge, strFindRestartRecord;
@@ -376,28 +399,29 @@ void CCodeBitDlg::GetCodeBitMsg(CFile& rFile)
 		DisplayFileReadCountInOneLine(numFixedLine, NumOfRowsRead++);
 		CTime logTime(dataReplay.m_time);
 		strJudge = (CString)dataReplay.m_data;
-		CString strRecordTime = CLogFileOperation::ConvertFromEpochToHumanReadableDate(dataReplay.m_time);	
+		CString strRecordTime = CLogFileOperation::ConvertFromEpochToHumanReadableDate(dataReplay.m_time);
 		if(logTime < m_StartQueryTime_CTime)
-		{ 
+		{
 			continue;
 		}
 		if (logTime >m_EndQueryTime_CTime)
 		{
 			break;
 		}
-		strFindRestartRecord = CLogFileOperation::IsFindRestartRecord(&strJudge, strRecordTime, 
-			&NumOfReadExpressCodeBits, &NumOfReadControlCodeBits);	// ²éÑ¯µ½ÖØÆð¼ÇÂ¼Ê±ÖØÖÃ¶ÁÈ¡µ½±íÊ¾¿ØÖÆÂëÎ»µÄ´ÎÊý
+		strFindRestartRecord = CLogFileOperation::IsFindRestartRecord(&strJudge, strRecordTime,
+			&NumOfReadExpressCodeBits, &NumOfReadControlCodeBits);	// ï¿½ï¿½Ñ¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼Ê±ï¿½ï¿½ï¿½Ã¶ï¿½È¡ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ä´ï¿½ï¿½ï¿½
 		if(!strFindRestartRecord.IsEmpty())
 		{
 			pMyView->m_pListBox->AddString(strFindRestartRecord);
 		}
 		if (strJudge.Find("[RPYBLK]") >= 0)
 		{
-			if (m_CountOfExpressCodeBitsSelectedList > 0)
+			if (numExpress > 0)
 			{
 				NumOfReadExpressCodeBits++;
 				resGetBitValue = GetBitValue(dataReplay.m_data, m_mapRecordExpressCodeBitsInfo, m_iterExpressCodeBits, &mapExpressCodeBitsTemp,
 					iterExpressTemp, NumOfReadExpressCodeBits, strRecordTime);
+
 				if (resGetBitValue < 0)
 				{
 					MessageBox("The code bits is empty, please confirm this record is complete!");
@@ -407,10 +431,10 @@ void CCodeBitDlg::GetCodeBitMsg(CFile& rFile)
 		}
 		else if (strJudge.Find("[RPYCTL]")>= 0)
 		{
-			if (m_CountOfControlCodeBitsSelectedList > 0)
+			if (numControl > 0)
 			{
 				NumOfReadControlCodeBits++;
-				resGetBitValue = GetBitValue(dataReplay.m_data, m_mapRecordControlCodeBitsInfo, m_iterControlCodeBits, &mapControlCodeBitsTemp, 
+				resGetBitValue = GetBitValue(dataReplay.m_data, m_mapRecordControlCodeBitsInfo, m_iterControlCodeBits, &mapControlCodeBitsTemp,
 					iterControlTemp, NumOfReadControlCodeBits, strRecordTime);
 				if (resGetBitValue < 0)
 				{
@@ -420,6 +444,8 @@ void CCodeBitDlg::GetCodeBitMsg(CFile& rFile)
 			}
 		}
 	}
+
+
 	rFile.SeekToBegin();
 	pMain = NULL;
 	pMyView = NULL;
@@ -427,8 +453,8 @@ void CCodeBitDlg::GetCodeBitMsg(CFile& rFile)
 	delete pMain;
 }
 
-int CCodeBitDlg::DisplayTheNumOfCodeBitsWithoutCADCOM(CFile &rFileNonCadcom)
-{	// Î´¼ÓÔØCADCOMÎÄ¼þÊ±£¬Í¨¹ý¼ÓÔØµÄIPDBGÎÄ¼þÈ·¶¨ÓÐ¶àÉÙ¿ØÖÆºÍ±íÊ¾ÂëÎ»
+int CCodeBitDlg::DisplayWithoutCADCOM(CFile &rFileNonCadcom)
+{	// Î´ï¿½ï¿½ï¿½ï¿½CADCOMï¿½Ä¼ï¿½Ê±ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½Øµï¿½IPDBGï¿½Ä¼ï¿½È·ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½Ù¿ï¿½ï¿½ÆºÍ±ï¿½Ê¾ï¿½ï¿½Î»
 	if (rFileNonCadcom == NULL)
 	{
 		return -1;
@@ -446,9 +472,9 @@ int CCodeBitDlg::DisplayTheNumOfCodeBitsWithoutCADCOM(CFile &rFileNonCadcom)
 		int m_FirstRecordOfExpressCodeBits = strJudge.Find("[RPYBLK]");
 		int m_FirstRecordOfControlCodeBits = strJudge.Find("[RPYCTL]");
 		if(m_FirstRecordOfExpressCodeBits >= 0 && m_flagExp == 0)
-		{	// Ö»¶ÁÈ¡Ò»´Î
+		{	// Ö»ï¿½ï¿½È¡Ò»ï¿½ï¿½
 			strExpressCodeBits = strJudge.Mid(m_FirstRecordOfExpressCodeBits + strlen("[RPYBLK]") + 12,
-				dataReplay.m_len - m_FirstRecordOfExpressCodeBits - strlen("[RPYBLK]") -12);//12ÎªÕ¾ºÅ+VRDÆ«ÒÆ+VRD±àÂëµÄ×Ö½Ú
+				dataReplay.m_len - m_FirstRecordOfExpressCodeBits - strlen("[RPYBLK]") -12);//12ÎªÕ¾ï¿½ï¿½+VRDÆ«ï¿½ï¿½+VRDï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½
 			cnt = ((strlen(strExpressCodeBits) - 1) -1) * 4;
 			for(int i = 0; i < cnt; i++)
 			{
@@ -458,7 +484,7 @@ int CCodeBitDlg::DisplayTheNumOfCodeBitsWithoutCADCOM(CFile &rFileNonCadcom)
 			m_flagExp = 1;
 		}
 		if(m_FirstRecordOfControlCodeBits >= 0 && m_flagCtr == 0)
-		{// Ö»¶ÁÈ¡Ò»´Î
+		{// Ö»ï¿½ï¿½È¡Ò»ï¿½ï¿½
 			strControlCodeBits = strJudge.Mid(m_FirstRecordOfControlCodeBits + strlen("[RPYCTL]") + 12,
 				dataReplay.m_len - m_FirstRecordOfControlCodeBits - strlen("[RPYCTL]") -12);
 			cnt = ((strlen(strControlCodeBits) - 1) - 1) * 4;
@@ -482,7 +508,7 @@ void CCodeBitDlg::DisplayFileReadCountInOneLine(int numFixedLine, int count)
 	CMainFrame *pMain = (CMainFrame *)AfxGetApp()->m_pMainWnd;
 	CLogFileFilterView *pView = (CLogFileFilterView *)pMain->GetActiveView();
 	CString strFileCount;
-	strFileCount.Format("²éÑ¯ÂëÎ»ÐÅÏ¢ÖÐ:%d", count); 
+	strFileCount.Format("ï¿½ï¿½Ñ¯ï¿½ï¿½Î»ï¿½ï¿½Ï¢ï¿½ï¿½:%d", count);
 	pView->m_pListBox->DeleteString(numFixedLine-1);
 	pView->m_pListBox->InsertString(numFixedLine-1, strFileCount);
 	pMain = NULL;
@@ -491,7 +517,7 @@ void CCodeBitDlg::DisplayFileReadCountInOneLine(int numFixedLine, int count)
 	delete pMain;
 }
 
-// 16½øÖÆ×Ö·û×ª¶þ½øÖÆÊý×é
+// 16ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½×ªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 int CCodeBitDlg::HexStrToInt(char strdata, int bufSize, char *BinaryArray)
 {
 	if (strdata == NULL || bufSize < 0 || BinaryArray == NULL)
@@ -517,27 +543,28 @@ int CCodeBitDlg::HexStrToInt(char strdata, int bufSize, char *BinaryArray)
 	return 0;
 }
 
-int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, CODEBITINFO>::iterator Niterator, 
+int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, CODEBITINFO>::iterator Niterator,
 	map<int, CODEBITINFO> *mapTmp, map<int, CODEBITINFO>::iterator iterTmp, int num, CString strTime)
 {
 	if (Ndata == NULL)
 	{
 		return -1;
 	}
-	//count++;	// ÅÐ¶ÏÊÇ·ñµÚÒ»´Î²éÑ¯(1)»òÃ»ÓÐ²éÑ¯(0)
+	//count++;	// ï¿½Ð¶ï¿½ï¿½Ç·ï¿½ï¿½ï¿½Ò»ï¿½Î²ï¿½Ñ¯(1)ï¿½ï¿½Ã»ï¿½Ð²ï¿½Ñ¯(0)
 	CMainFrame *pMain = (CMainFrame *)AfxGetApp()->m_pMainWnd;
 	CLogFileFilterView *pView = (CLogFileFilterView *)pMain->GetActiveView();
-	unsigned int numInteger = 0, numRemainder = 0;	
+	unsigned int numInteger = 0, numRemainder = 0;
 	char tempBuf[10] = {0};
-	CString strTmp, strIsTimeRecord, strBitChange;	// ÐèÔö¼Ó¶Ô±íÊ¾ÂëÎ»¶¨Ê±¼ÇÂ¼µÄÅÐ¶Ï
+	CString strTmp, strIsTimeRecord, strBitChange;	// ï¿½ï¿½ï¿½ï¿½ï¿½Ó¶Ô±ï¿½Ê¾ï¿½ï¿½Î»ï¿½ï¿½Ê±ï¿½ï¿½Â¼ï¿½ï¿½ï¿½Ð¶ï¿½
 	strIsTimeRecord.Format("%s", Ndata);
 	for(Niterator = Nmap.begin(); Niterator != Nmap.end(); Niterator++)
-	{	// ¸ù¾ÝÂëÎ»µÄ±àºÅÈ¥ÕÒµ½ÂëÎ»ÖÐ¼ÇÂ¼µÄÎ»ÖÃ
+	{	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ä±ï¿½ï¿½ï¿½È¥ï¿½Òµï¿½ï¿½ï¿½Î»ï¿½Ð¼ï¿½Â¼ï¿½ï¿½Î»ï¿½ï¿½
+		unsigned long time1 = GetCurrentTime();
 		numInteger = (Niterator->first -1)/8;
 		numRemainder = (Niterator->first - 1)%8;
 		if(numRemainder > 3)
 		{
-			//×ª»»Îª¶þ½øÖÆÊý×é
+			//×ªï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			if (strIsTimeRecord.Find("[TIMER_RECORD]") >= 0)
 			{
 				HexStrToInt(Ndata[numInteger*2 + 12 + strlen("[TIMER_RECORD][RPYBLK]")], sizeof(tempBuf), tempBuf);
@@ -551,9 +578,9 @@ int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, C
 		}
 		else if(numRemainder <= 3)
 		{
-			//×ª»»Îª¶þ½øÖÆÊý×é
+			//×ªï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			if (strIsTimeRecord.Find("[TIMER_RECORD]") >= 0)
-			{	
+			{
 				HexStrToInt(Ndata[numInteger*2 + 1 + 12 + strlen("[TIMER_RECORD][RPYBLK]")], sizeof(tempBuf), tempBuf);
 				Niterator->second.CodeBitStatus = tempBuf[3 - numRemainder];
 			}
@@ -568,9 +595,14 @@ int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, C
 			Niterator->second.CodeBitName.Format("%d", Niterator->first);
 		}
 		strTmp += Niterator->second.CodeBitName + '(' + Niterator->second.CodeBitStatus + ") ";
+		unsigned long time2 = GetCurrentTime();
+		if (time2 - time1 > 10)
+		{
+			TRACE("%d, %d\n", (time2 - time1), numRemainder);
+		}
 	}
 	if (num == 1)
-	{//²éÑ¯µÚÒ»Ìõ±íÊ¾ÂëÎ»Ê±£¬Ö±½Ó´òÓ¡»ò²éÑ¯µ½ÖØÆô¼ÇÂ¼Ê±(mapÎª¿Õ)
+	{//ï¿½ï¿½Ñ¯ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½Î»Ê±ï¿½ï¿½Ö±ï¿½Ó´ï¿½Ó¡ï¿½ï¿½ï¿½ï¿½Ñ¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼Ê±(mapÎªï¿½ï¿½)
 		strTmp = strTime + " " + strTmp;
 		pView->m_pListBox->AddString(strTmp);
 	}
@@ -578,8 +610,8 @@ int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, C
 	{
 		for(Niterator = Nmap.begin(), iterTmp = mapTmp->begin();
 			Niterator != Nmap.end(), iterTmp != mapTmp->end();
-			Niterator++, iterTmp++)	
-		{//±éÀúmap,Ö»ÏÔÊ¾±ä»¯µÄÂëÎ»£¬Ã»±ä»¯µÄÂëÎ»²»ÏÔÊ¾
+			Niterator++, iterTmp++)
+		{//ï¿½ï¿½ï¿½ï¿½map,Ö»ï¿½ï¿½Ê¾ï¿½ä»¯ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½Ã»ï¿½ä»¯ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½Ê¾
 			if(Niterator->second.CodeBitStatus != iterTmp->second.CodeBitStatus)
 			{
 				strBitChange += Niterator->second.CodeBitName + '(' + Niterator->second.CodeBitStatus + ") ";
@@ -593,11 +625,5 @@ int CCodeBitDlg::GetBitValue(char* Ndata, map<int, CODEBITINFO> Nmap, map<int, C
 	}
 	pView->m_pListBox->UpdateWindow();
 	*mapTmp = Nmap;
-	pMain = NULL;
-	pView = NULL;
-	delete pView;
-	delete pMain;
 	return 0;
 }
-
-

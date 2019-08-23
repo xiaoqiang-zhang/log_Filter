@@ -6,8 +6,8 @@
 enum{MAX_CLIENTS_NUM=16, RECORD_FLAG=0xAA, RECORD_FLAG_Number=0x48};
 enum{IntL_1 = 1, IntL_2 = 2, IntL_4 = 4};
 	
-//CReadLogFile
-int CReadLogFile::GetIntegerLengthInLog(IntegerLength eIntL)
+////////////////non member function////////////////////////////
+const int GetIntegerLengthInLog(const IntegerLength eIntL)
 {
 	int iIntSizeInLog = 0;
 	if (eIntL == IntL_1)
@@ -22,29 +22,26 @@ int CReadLogFile::GetIntegerLengthInLog(IntegerLength eIntL)
 	{
 		iIntSizeInLog = 8;
 	}
-	else
-	{
-
-	}
 	return iIntSizeInLog;
 }
-int CReadLogFile::ReadIntegerValueFromLog(CFile& rFile, void* pIntValue, IntegerLength eIntL)
+
+int LogFile::ReadIntegerValueFromLog(void* pIntValue, IntegerLength eIntL)
 {
 	int iIntSizeInLog = GetIntegerLengthInLog(eIntL);   //得到2,4,8
-	char ch[1] = {0};
-	//int sizeRead = fread(ch, 1, 1, &rFile);
-	int sizeRead = rFile.Read(ch, 1);
-	if (ch[0] != '\n') 
+	char chFlag = NULL;
+	int sizeRead = fread(chFlag, 1, 1, &rLogFile._file);
+	//int sizeRead = rstreamFile.read(ch, sizof(ch));
+	if (chFlag != '\n') 
 	{
-		//fseek(&rFile, -1, SEEK_CUR);
-		rFile.Seek(-1, CFile::current);
+		fseek(_file, -1, SEEK_CUR);
+		//rstreamFile.seekg(-1, CFile::current);
 	}
 
 	char* pszBuf = new char[iIntSizeInLog + 1];     //设置一个指针（pszBuf[iIntSizeInLog+1]），读取文件内容
 	memset(pszBuf, 0, iIntSizeInLog + 1);
 
-	//sizeRead = fread(pszBuf, 1, iIntSizeInLog, &rFile);
-	sizeRead = rFile.Read(pszBuf, iIntSizeInLog);
+	sizeRead = fread(pszBuf, 1, iIntSizeInLog, _file);
+	//sizeRead = rFile.Read(pszBuf, iIntSizeInLog);
 	unsigned long lValue = strtoul(pszBuf, NULL, 16);    //读取出的内容转换为16进制
 	if (eIntL == IntL_1)		          //数据类型转换？
 	{
@@ -58,53 +55,44 @@ int CReadLogFile::ReadIntegerValueFromLog(CFile& rFile, void* pIntValue, Integer
 	{
 		*(unsigned long*)pIntValue = lValue;
 	}
-	else
-	{
-
-	}
 	delete[] pszBuf;
 	return sizeRead;
 }
-bool CReadLogFile::IsReplayFileFormatBinary(CFile& rFile)
+////////////////Determine if the file is a binary file////////// 
+BOOL LogFile::BinaryFile()
 {
 	//以日志文件的第一个字节作为判断依据
-	unsigned char cRecordFlag = 0;
-	//int sizeRead = fread(&cRecordFlag, 1, 1, &rFile);
-	int sizeRead = rFile.Read(&cRecordFlag, 1);
+	char cRecordFlag = NULL;
+	int sizeRead = fread(&cRecordFlag, 1, 1, _file);
+	//int sizeRead = rstreamFile.Read(&cRecordFlag, 1);
 	if (sizeRead > 0)
 	{
-		//fseek(&rFile, -1, SEEK_CUR);
-		rFile.Seek(-1, CFile::current);
+		fseek(_file, -1, SEEK_CUR);
 		return cRecordFlag == RECORD_FLAG;
 	}
 	return false;//默认为新格式
 }
-int CReadLogFile::ReadReplayDataFromLog(CFile& rFile, REPLAY_DATA& dataReplay)
+///////////////Read fixed size data/////////////////////////////////
+REPLAY_DATA LogFile::ReadDataFromFile()
 {
 	int iRetLen = 0;
 	int sizeRead = 0;
-	if (IsReplayFileFormatBinary(rFile))
+	REPLAY_DATA dataReplay;
+	if (BinaryFile())
 	{//二进制回放格式，即老的回放格式
 		//sizeRead = fread(&dataReplay, 1, sizeof(REPLAY_DATA), &rFile);
 		memset(&dataReplay, 0, sizeof(dataReplay));
-		//sizeRead = fread(&dataReplay.m_flag, 1, 1, &rFile);
-		//sizeRead = fread(&dataReplay.m_time, 1, 4, &rFile);
-		//sizeRead = fread(&dataReplay.m_len, 1, 2, &rFile);
-		//sizeRead = fread(&dataReplay.m_data, 1, dataReplay.m_len, &rFile);
-		//sizeRead = fread(&dataReplay.m_position, 1, 4, &rFile);
-		//CString str = (CString)dataReplay.m_data;
-		sizeRead = rFile.Read(&dataReplay.m_flag, 1);
-		sizeRead = rFile.Read(&dataReplay.m_time, 4);
-		sizeRead = rFile.Read(&dataReplay.m_len, 2);
-		sizeRead = rFile.Read(&dataReplay.m_data, dataReplay.m_len);
-		sizeRead = rFile.Read(&dataReplay.m_position, 4);
+		sizeRead = fread(&dataReplay.m_flag, 1, 1, &rFile);
+		sizeRead = fread(&dataReplay.m_time, 1, 4, &rFile);
+		sizeRead = fread(&dataReplay.m_len, 1, 2, &rFile);
+		sizeRead = fread(&dataReplay.m_data, 1, dataReplay.m_len, &rFile);
+		sizeRead = fread(&dataReplay.m_position, 1, 4, &rFile);	
 		if (sizeRead <= 0)
 		{
 			return 0;
 		}
 		if (dataReplay.m_len > 1000)
 		{
-			//DebugMsgOut(0,"[IP]:回放数据的数据段长度:%d 超长",dataReplay.m_len);
 			return 0;
 		}
 		dataReplay.m_position = *(long*)&dataReplay.m_data[dataReplay.m_len];            
@@ -136,27 +124,101 @@ int CReadLogFile::ReadReplayDataFromLog(CFile& rFile, REPLAY_DATA& dataReplay)
 			return 0;
 		}
 		iRetLen += sizeRead;
-		//sizeRead = fread(dataReplay.m_data, 1, dataReplay.m_len, &rFile);
-		sizeRead = rFile.Read(&dataReplay.m_data, dataReplay.m_len);
+		sizeRead = fread(dataReplay.m_data, 1, dataReplay.m_len, &rFile);
+		//sizeRead = rFile.Read(&dataReplay.m_data, dataReplay.m_len);
 		if (sizeRead <= 0)
 		{
 			return 0;
 		}
-		iRetLen += sizeRead;
 		sizeRead = ReadIntegerValueFromLog(rFile, &dataReplay.m_position, IntL_4);
 		if (sizeRead <= 0)
 		{
 			return 0;
 		}
-		iRetLen += sizeRead;
 	}
-	return iRetLen;
+	return dataReplay;
 }
 
-//CLogFileOperation
-int CLogFileOperation::SetLogTimeWidthAndDefaultQueryTime(CFile &rFile, CEdit &m_Editcontrol, CDateTimeCtrl &timestart, CDateTimeCtrl &timestop)
+std::string LogFile::GetLogBeaginTime(unsigned long ulBeginTime)
+{
+	REPLAY_DATA replayData = ReadDataFromFile();
+	//std::string strTime;
+	if (replayData == NULL)
+	{
+		fseek(_file, 0, SEEK_SET);
+		ulBeginTime = 0;
+		return "read first record error!";
+	}
+	std::string strTime = EpocoConversion(replayData.m_time);	//TimeStamp convert to normal date
+	ulBeginTime = replayData.m_time;
+	fseek(_file, 0, SEEK_SET);
+	return strTime;
+}
+
+std::string LogFile::GetLogEndTime(unsigned long ulEndTime)
+{
+	char chFalg, chWrap = NULL;
+	unsigned long ulLastRecordTime = 0;
+	std::string strTime
+	int wrapCount = 0;
+	fseek(_file, 0, SEEK_END);
+	if (BinaryFile())
+	{
+		while(1)
+		{
+			fread(&chWrap, sizeof(chWrap), 1, _file);
+			if(chWrap != '\n')
+			{
+				fseek(_file, -2, SEEK_CUR);
+				continue;
+			}
+			wrapCount++;
+			if (wrapCount == 2)
+			{
+				fseek(_file, 5, 1, SEEK_CUR);
+				fread(&ulLastRecordTime, sizeof(ulLastRecordTime), 1, _file);
+				strTime = EpocoConversion(ulLogFirstRecord);
+				break;
+			}
+		}
+	}
+	else
+	{
+		while (1)
+		{
+			fread(&chWrap, sizeof(chWrap), 1， _file);
+			if(chWrap != '\n')
+			{
+				fseek(_file, -2, SEEK_CUR);
+				continue;
+			}
+			wrapCount++;
+			if (wrapCount == 2)
+			{
+				fseek(_file, 10, SEEK_CUR);
+				fread(&ulLastRecordTime, sizeof(ulLastRecordTime), 1, _file);
+				strTime = EpocoConversion(ulLastRecordTime);
+				break;
+			}
+		}
+	}
+	ulEndTime = ulLastRecordTime;
+	rewind(_file);	//将文件指针指向文件头
+	//strLogFirstRecordTime = ConvertFromEpochToHumanReadableDate(ulLogFirstRecord);	//TimeStamp convert to normal date
+	//strLogLastRecordTime = ConvertFromEpochToHumanReadableDate(ulLogLastRecord);	//TimeStamp convert to normal date
+	//strLogTimeWidth = strLogFirstRecordTime + "--" + strLogLastRecordTime;	
+	//m_Editcontrol.SetWindowText(strLogTimeWidth);
+	//timestart.SetFormat("yyyy-MM-dd HH:mm:ss");	
+	//timestop.SetFormat("yyyy-MM-dd HH:mm:ss");
+	//CTime t_Start(ulLogFirstRecord), t_Stop(ulLogLastRecord);
+	//timestart.SetTime(&t_Start);
+	//timestop.SetTime(&t_Stop);
+	return strTime
+}
+
+/*int LogFile::SetLogTimeWidthAndDefaultQueryTime(LogFile &logFile, CEdit &m_Editcontrol, CDateTimeCtrl &timestart, CDateTimeCtrl &timestop)
 {	// 开始时间默认为日志第一条记录的时间，结束时间为日志最后一条记录的时间
-	if (rFile == NULL)
+	if (logFile == NULL)
 	{
 		return -1;
 	}
@@ -167,11 +229,11 @@ int CLogFileOperation::SetLogTimeWidthAndDefaultQueryTime(CFile &rFile, CEdit &m
 	char chWrap[1] = {0};
 	int n = sizeof(chWrap);
 	bool flagNewRecord = false;
-	if (!CReadLogFile::IsReplayFileFormatBinary(rFile))
+	if (!GetFileISBinary(rFile))
 	{
 		flagNewRecord = true;
 	}
-	int readSize = CReadLogFile::ReadReplayDataFromLog(rFile, dataReplay);
+	int readSize = logFile.GetReplayDataFromLog(rFile, dataReplay);
 	if (readSize <= 0)
 	{
 		return -2;
@@ -234,7 +296,7 @@ int CLogFileOperation::SetLogTimeWidthAndDefaultQueryTime(CFile &rFile, CEdit &m
 
 	rFile.SeekToBegin();
 	return 1;
-}
+}*/
 
 void CLogFileOperation::ChangeToTime(unsigned long mTime, char *timeTmp, int num)
 {

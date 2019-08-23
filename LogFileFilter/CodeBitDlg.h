@@ -7,7 +7,6 @@
 // CodeBitDlg.h : header file
 //
 #include <map>
-using namespace std; 
 /////////////////////////////////////////////////////////////////////////////
 // CCodeBitDlg dialog
 
@@ -41,16 +40,16 @@ public:
 	int	m_Flag_SelectAllOrDeleteSelected_ExpressCodeBits;
 	int	m_Flag_SelectAllOrDeleteSelected_ControlCodeBits;
 	int	m_Flag_LoadCadcomFile;	// 是否加载CADCOM文件
-	int	m_CountOfControlCodeBitsSelectedList;
-	int	m_CountOfExpressCodeBitsSelectedList;
+	//int	m_CountOfControlCodeBitsSelectedList;
+	//int	m_CountOfExpressCodeBitsSelectedList;
 	//////////
 	map<int,CODEBITINFO> m_mapRecordExpressCodeBitsInfo;
 	map<int,CODEBITINFO>::iterator m_iterExpressCodeBits;
 	map<int,CODEBITINFO> m_mapRecordControlCodeBitsInfo;
 	map<int,CODEBITINFO>::iterator m_iterControlCodeBits;
 	//}}AFX_DATA
-	CFile* pFileIpdbg;
-	CStdioFile* pFileCadcom;
+	//CFile* pFileIpdbg;
+	//CStdioFile* pFileCadcom;
 
 
 // Overrides
@@ -83,10 +82,10 @@ public:
 	afx_msg void OnDatetimechangeQuerytimestop(NMHDR *pNMHDR, LRESULT *pResult);
 	afx_msg void OnClickedCheck();
 	afx_msg void OnClickedCancel();
-	void GetQueryCodeBit();
-	void GetCodeBitMsg(CFile& rFile);
-	int DisplayTheNumOfCodeBitsWithCADCOM(CStdioFile &rFile);
-	int DisplayTheNumOfCodeBitsWithoutCADCOM(CFile &rFileNonCadcom);
+	void GetQueryCodeBit(const int numControl, const int numExpress);
+	void GetCodeBitMsg(CFile& rFile, const int numControl, const int numExpress);
+	int DisplayWithCADCOM(CStdioFile &rFile);
+	int DisplayWithoutCADCOM(CFile &rFileNonCadcom);
 	void DisplayFileReadCountInOneLine(int numFixedLine, int count);
 	
 	int HexStrToInt(char strdata, int bufSize ,char *BinaryArray);	// 字符数据转整形
