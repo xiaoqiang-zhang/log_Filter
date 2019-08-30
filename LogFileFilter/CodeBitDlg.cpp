@@ -113,8 +113,8 @@ BOOL CCodeBitDlg::OnInitDialog()
 	int resDisplayBits = 0;
 	if(pMyView->strCadcomFilePath.IsEmpty())
 	{
-		pFileIpdbg->SeekToBegin();
-		int resDisplayBits = DisplayWithoutCADCOM(*pFileIpdbg);
+		//pFileIpdbg->SeekToBegin();
+		int resDisplayBits = DisplayWithoutCADCOM(*ipdbgLogFile);
 		if (resDisplayBits < 0)
 		{
 			MessageBox("An error occurred while displaying the code bit!");
@@ -454,7 +454,7 @@ void CCodeBitDlg::GetCodeBitMsg(CFile& rFile, const int numControl, const int nu
 }
 
 int CCodeBitDlg::DisplayWithoutCADCOM(CFile &rFileNonCadcom)
-{	// δ����CADCOM�ļ�ʱ��ͨ�����ص�IPDBG�ļ�ȷ���ж��ٿ��ƺͱ�ʾ��λ
+{	// 以数字形式表示码位
 	if (rFileNonCadcom == NULL)
 	{
 		return -1;
